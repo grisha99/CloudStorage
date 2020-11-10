@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<VBox alignment="center" xmlns="http://javafx.com/javafx/10.0.2-internal"
+      xmlns:fx="http://javafx.com/fxml/1" fx:controller="ru.grishenko.storage.client.Controller">
+    <MenuBar>
+        <Menu text="Файл">
+            <MenuItem onAction="#menuExitClick" text="Выход" />
+        </Menu>
+
+    </MenuBar>
+    <HBox spacing="5.0" VBox.vgrow="ALWAYS">
+        <VBox spacing="5.0" HBox.hgrow="ALWAYS">
+         <GridPane>
+            <columnConstraints>
+               <ColumnConstraints hgrow="SOMETIMES" minWidth="10.0" />
+            </columnConstraints>
+            <rowConstraints>
+               <RowConstraints minHeight="10.0" vgrow="SOMETIMES" />
+            </rowConstraints>
+            <children>
+                  <Label text="Локальный компьютер" GridPane.halignment="CENTER" />
+            </children>
+         </GridPane>
+            <HBox>
+                <ComboBox fx:id="disksBox" onAction="#disksBoxAction" />
+                <Button fx:id="btnLocalUp" onAction="#btnLocalUpAction" text="Вверх" />
+                <TextField fx:id="localPathField" editable="false" HBox.hgrow="ALWAYS" />
+            </HBox>
+            <TableView fx:id="localFilesView" onMouseClicked="#localTableMouseDblClick" VBox.vgrow="ALWAYS" />
+            <HBox>
+                <Button text="Переименовать" />
+                <Button text="Удалить" />
+            </HBox>
+
+        </VBox>
+      <VBox fx:id="centerPanel" disable="true" HBox.hgrow="NEVER">
+         <children>
+      
+              <GridPane vgap="5.0" VBox.vgrow="ALWAYS">
+                  <Button maxWidth="Infinity" text="Upload" GridPane.valignment="BOTTOM" />
+                  <Button maxWidth="Infinity" text="Download" GridPane.rowIndex="1" GridPane.valignment="TOP" />
+               <columnConstraints>
+                  <ColumnConstraints />
+               </columnConstraints>
+               <rowConstraints>
+                  <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="ALWAYS" />
+                  <RowConstraints vgrow="ALWAYS" />
+               </rowConstraints>
+              </GridPane>
+         </children>
+      </VBox>
+
+        <VBox fx:id="remoteSide" spacing="5.0" HBox.hgrow="ALWAYS">
+            <GridPane>
+                <columnConstraints>
+                    <ColumnConstraints hgrow="SOMETIMES" minWidth="10.0" />
+                </columnConstraints>
+                <rowConstraints>
+                    <RowConstraints minHeight="10.0" vgrow="SOMETIMES" />
+                </rowConstraints>
+                <children>
+                    <Label text="Удаленный сервер" GridPane.halignment="CENTER" />
+                </children>
+            </GridPane>
+            <VBox fx:id="authLayer">
+                <Label text="Имя пользователя:" />
+                <TextField fx:id="userNameField" />
+                <Label text="Парооль:" />
+                <PasswordField fx:id="userPassField" />
+                <GridPane>
+                    <columnConstraints>
+                        <ColumnConstraints hgrow="SOMETIMES" minWidth="10.0" />
+                    </columnConstraints>
+                    <rowConstraints>
+                        <RowConstraints minHeight="10.0" vgrow="SOMETIMES" />
+                    </rowConstraints>
+                    <children>
+                        <Button onAction="#sendAuthData" text="Подключиться" textAlignment="CENTER" GridPane.halignment="CENTER" />
+                    </children>
+                </GridPane>
+                <opaqueInsets>
+                    <Insets />
+                </opaqueInsets>
+            </VBox>
+            <VBox fx:id="workLayer" visible="false" VBox.vgrow="ALWAYS">
+                <HBox>
+                    <ComboBox />
+                    <TextField editable="false" HBox.hgrow="ALWAYS" />
+                </HBox>
+                <TableView fx:id="remoteFilesView" VBox.vgrow="ALWAYS" />
+                <HBox>
+                    <Button text="Переименовать" />
+                    <Button text="Удалить" />
+                </HBox>
+            </VBox>
+
+        </VBox>
+    </HBox>
+
+</VBox>

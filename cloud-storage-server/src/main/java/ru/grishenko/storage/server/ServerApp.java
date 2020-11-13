@@ -7,8 +7,9 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
-import io.netty.handler.codec.string.StringDecoder;
-import io.netty.handler.codec.string.StringEncoder;
+import io.netty.handler.codec.serialization.ClassResolvers;
+import io.netty.handler.codec.serialization.ObjectDecoder;
+import io.netty.handler.codec.serialization.ObjectEncoder;
 
 public class ServerApp {
 
@@ -28,8 +29,12 @@ public class ServerApp {
                         @Override
                         protected void initChannel(SocketChannel socketChannel) throws Exception {
                             // инициализация подключающихся клиентов
-                            socketChannel.pipeline().addLast(new StringDecoder(), new StringEncoder(),
-                                    new StringCommandInputHandler(userDAO));
+                            socketChannel.pipeline().addLast(
+//                                    new StringDecoder(),
+//                                    new StringEncoder(),
+                                    new ObjectDecoder(ClassResolvers.cacheDisabled(null)),
+                                    new ObjectEncoder(),
+                                    new ObjectCommandInputHandler(userDAO));
                         }
                     });
             ChannelFuture future = sbs.bind(SERVER_PORT).sync();

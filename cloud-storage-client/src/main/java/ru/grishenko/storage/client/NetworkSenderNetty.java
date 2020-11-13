@@ -5,19 +5,26 @@ import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.codec.serialization.ClassResolvers;
+import io.netty.handler.codec.serialization.ObjectDecoder;
+import io.netty.handler.codec.serialization.ObjectEncoder;
 import io.netty.handler.codec.string.StringDecoder;
 import io.netty.handler.codec.string.StringEncoder;
+import ru.grishenko.storage.client.handler.ChunkedFileInbounHandler;
+import ru.grishenko.storage.client.handler.CommandInboundHandler;
+import ru.grishenko.storage.client.helper.Command;
+import ru.grishenko.storage.client.helper.FileRequest;
 import ru.grishenko.storage.client.interf.CallBack;
 
 public class NetworkSenderNetty {
 
     private SocketChannel channel;
-    private CallBack onMessageReceivedCallBack;
+//    private CallBack onMessageReceivedCallBack;
 
 
     public NetworkSenderNetty(CallBack onMessageReceivedCallBack) {
-        this.onMessageReceivedCallBack = onMessageReceivedCallBack;
-        new Thread(() -> {
+//        this.onMessageReceivedCallBack = onMessageReceivedCallBack;
+        Thread t = new Thread(() -> {
             EventLoopGroup workerGroup = new NioEventLoopGroup();
 
             try {
@@ -28,16 +35,13 @@ public class NetworkSenderNetty {
                             @Override
                             protected void initChannel(SocketChannel socketChannel) throws Exception {
                                 channel = socketChannel;
-                                socketChannel.pipeline().addLast(new StringDecoder(), new StringEncoder(),
-                                        new SimpleChannelInboundHandler<String>() {
-                                            @Override
-                                            protected void channelRead0(ChannelHandlerContext channelHandlerContext, String s) throws Exception {
-                                                if (onMessageReceivedCallBack != null) {
-                                                    onMessageReceivedCallBack.callBack(s);
-                                                }
-                                                System.out.println("принял");
-                                            }
-                                        });
+                                socketChannel.pipeline().addLast(
+                                        new ObjectDecoder(ClassResolvers.cacheDisabled(null)),
+                                        new ObjectEncoder(),
+//                                        new ChunkedFileInbounHandler(),
+                                        new CommandInboundHandler(onMessageReceivedCallBack)
+
+                                );
                             }
                         });
                 ChannelFuture future = bsb.connect("localhost", 8189).sync();
@@ -47,10 +51,16 @@ public class NetworkSenderNetty {
             } finally {
                 workerGroup.shutdownGracefully();
             }
-        }).start();
+        });
+        t.setDaemon(true);
+        t.start();
     }
 
-    public void sendCommand(String comm) {
-        channel.writeAndFlush(comm);
+    public void sendCommand(Command command) {
+        channel.writeAndFlush(command);
     }
+
+//    public void fileRequest(FileRequest fileRequest) {
+//        channel.writeAndFlush()
+//    }
 }

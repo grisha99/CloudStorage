@@ -5,26 +5,26 @@ import ru.grishenko.storage.server.exception.UserPassException;
 
 public class AuthInfo {
 
-    private String name;
+    private String login;
     private String pass;
 
     public String getName() {
-        return name;
+        return login;
     }
 
     public String getPass() {
         return pass;
     }
 
-    public AuthInfo(String userString) throws UserLoginException, UserPassException {
-        String [] tmp = userString.split(" ");
-        if (tmp.length == 1) {
+    public AuthInfo(String [] args) throws UserLoginException, UserPassException {
+
+        if (args.length == 0) {
             throw new UserLoginException();
         }
-        if (tmp.length == 2) {
+        if (args.length == 1) {
             throw new UserPassException();
         }
-        name = tmp[1];
-        pass = tmp[2];
+        login = args[0];
+        pass = args[1];
     }
 }

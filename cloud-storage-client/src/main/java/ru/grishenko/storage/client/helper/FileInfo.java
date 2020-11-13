@@ -1,12 +1,13 @@
-package ru.grishenko.storage.client;
+package ru.grishenko.storage.client.helper;
 
 import java.io.IOException;
+import java.io.Serializable;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 
-public class FileInfo {
+public class FileInfo implements Serializable {
 
     public enum FileType {
         FILE("F"), DIRECTORY("D");
@@ -26,9 +27,14 @@ public class FileInfo {
     private FileType type;
     private long size;
     private LocalDateTime modified;
-//    private LocalDateTime created;
 
+    public FileInfo() {
+        this.fileName = "...";
+        this.type = FileType.DIRECTORY;
+        this.size = -1L;
+        this.modified = LocalDateTime.now();
 
+    }
     public FileInfo(Path path){
 
         try {
@@ -40,7 +46,7 @@ public class FileInfo {
             } else {
                 this.size = Files.size(path);
             }
-//            this.created = LocalDateTime.of(Files.getAttribute(path, "creationTime").toString())
+
             this.modified = LocalDateTime.ofInstant(Files.getLastModifiedTime(path).toInstant(), ZoneOffset.ofHours(3));
         } catch (IOException e) {
             throw new RuntimeException("Error create FileInfo from path \"" + path.toString() + "\"");
@@ -80,11 +86,4 @@ public class FileInfo {
         this.modified = modified;
     }
 
-//    public LocalDateTime getCreated() {
-//        return created;
-//    }
-//
-//    public void setCreated(LocalDateTime created) {
-//        this.created = created;
-//    }
 }

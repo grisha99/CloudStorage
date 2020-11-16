@@ -15,7 +15,7 @@ public class Command implements Serializable {
         DEL("/del %s"),                         // удалить файл/каталог
         CD("/cd %s"),                           // переход в директорию
         UPCD("/cd.."),                          // переход науровень выше
-        COPY("/copy %s %s"),
+        COPY("/copy %s"),                       // копирование файла
         MOVE("/move %s %s"),
 
         AUTH_OK("/authOK %s"),                  // удачная авторизация

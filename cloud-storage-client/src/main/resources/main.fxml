@@ -45,8 +45,8 @@
          <children>
       
               <GridPane minWidth="71.0" vgap="5.0" VBox.vgrow="ALWAYS">
-                  <Button maxWidth="Infinity" onAction="#uploadAction" text="Upload" GridPane.valignment="BOTTOM" />
-                  <Button maxWidth="Infinity" onAction="#downloadAction" text="Download" GridPane.rowIndex="1" GridPane.valignment="TOP" />
+                  <Button fx:id="uploadButton" maxWidth="Infinity" onAction="#uploadAction" text="Upload" GridPane.valignment="BOTTOM" />
+                  <Button fx:id="downloadButton" maxWidth="Infinity" onAction="#downloadAction" text="Download" GridPane.rowIndex="1" GridPane.valignment="TOP" />
                <columnConstraints>
                   <ColumnConstraints />
                </columnConstraints>

@@ -11,8 +11,11 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.VBox;
 import ru.grishenko.storage.client.helper.Command;
 import ru.grishenko.storage.client.helper.FileInfo;
+import ru.grishenko.storage.client.helper.FileWrapper;
 import ru.grishenko.storage.client.helper.TableInitializer;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.file.FileSystems;
@@ -28,6 +31,12 @@ public class Controller implements Initializable {
 
     @FXML
     ContextMenu cmTF;
+
+    @FXML
+    Button uploadButton;
+
+    @FXML
+    Button downloadButton;
 
     @FXML
     TableView<FileInfo> localFilesView;
@@ -64,6 +73,7 @@ public class Controller implements Initializable {
     private boolean isAuthOK;
 
     private NetworkSenderNetty sender;
+    private FileOutputStream fos;
 
     public void menuExitClick(ActionEvent actionEvent) {
         Platform.exit();
@@ -96,10 +106,10 @@ public class Controller implements Initializable {
         updateFileList(Paths.get("."));
 
         sender = new NetworkSenderNetty((args) -> {
-            if (args[0] instanceof String ) {
-                String answer = (String) args[0];
-                System.out.println(answer);
-            }
+//            if (args[0] instanceof String ) {
+//                String answer = (String) args[0];
+//                System.out.println(answer);
+//            }
 
             if (args[0] instanceof Command) {
                 Command cmd = (Command) args[0];
@@ -109,7 +119,7 @@ public class Controller implements Initializable {
                         authLayer.setVisible(false);
                         authLayer.setManaged(false);
                         workLayer.setDisable(false);
-//                        centerPanel.setDisable(false);
+                        centerPanel.setDisable(false);
                         remotePathField.setText(cmd.getArgs()[0]);
                         sender.sendCommand(Command.generate(Command.CommandType.LIST));
                         break;
@@ -134,6 +144,38 @@ public class Controller implements Initializable {
 
                         break;
                     }
+                }
+            }
+
+            if (args[0] instanceof FileWrapper) {
+                FileWrapper fw = (FileWrapper) args[0];
+                System.out.println(fw.toString());
+                try {
+                    if (fw.getType() == Command.CommandType.COPY) {
+                        File file = new File(getCurrentPath().resolve(fw.getFileName()).toString());
+                        if (!file.exists()) {
+                            file.createNewFile();
+                        }
+                        if (fos == null) {
+                            fos = new FileOutputStream(file);
+
+                        }
+                        if (fos.getChannel().isOpen()) {
+                            fos.write(fw.getBuffer(), 0, fw.getReadByte());
+                        } else {
+                            fos = new FileOutputStream(file);
+                            fos.write(fw.getBuffer(), 0, fw.getReadByte());
+
+                        }
+                        if (fw.getCurrentPart() == fw.getParts()) {
+                            fos.close();
+//                            ctx.channel().writeAndFlush(Command.generate(Command.CommandType.FILE_OPERATION_OK));
+                            updateFileList(getCurrentPath());
+                        }
+
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
             }
 
@@ -196,6 +238,13 @@ public class Controller implements Initializable {
                     btnLocalUpAction(null);
                 }
             }
+//            if (mouseEvent.getClickCount() == 1) {
+//                if (!localFilesView.getSelectionModel().getSelectedItem().getFileName().equals("...")) {
+//                    Path selectedPath = Paths.get(localPathField.getText()).
+//                            resolve(localFilesView.getSelectionModel().getSelectedItem().getFileName());
+//                    uploadButton.setDisable(Files.isDirectory(selectedPath));
+//                }
+//            }
         }
     }
 
@@ -203,8 +252,8 @@ public class Controller implements Initializable {
         return localFilesView.getSelectionModel().getSelectedItem().getFileName();
     }
 
-    public String getCurrnePath() {
-        return localPathField.getText();
+    public Path getCurrentPath() {
+        return Paths.get(localPathField.getText());
     }
 
     public void sendAuthData(ActionEvent actionEvent) {
@@ -349,17 +398,22 @@ public class Controller implements Initializable {
         return result.orElse(null);
     }
 
-    public void uploadAction(ActionEvent actionEvent) {
-//        FileInfo info = localFilesView.getSelectionModel().getSelectedItem();
-//        if (info != null) {
-//            sender.sendCommand(Command.generate(Command.CommandType.COPY, info.getFileName()));
-//        }
+    public void uploadAction(ActionEvent actionEvent) throws IOException {
+//        FileInfo info = remoteFilesView.getSelectionModel().getSelectedItem();
+        Path filePath = Paths.get(localPathField.getText()).
+                resolve(localFilesView.getSelectionModel().getSelectedItem().getFileName());
+        if (Files.exists(filePath) && !Files.isDirectory(filePath)) {
+            sender.sendFile(filePath, Command.CommandType.COPY);
+        } else {
+            Alert alert = new Alert(Alert.AlertType.WARNING, "Не выбран файл для загрузки", ButtonType.OK);
+            alert.showAndWait();
+        }
     }
 
     public void downloadAction(ActionEvent actionEvent) {
-        FileInfo info = remoteFilesView.getSelectionModel().getSelectedItem();
-        if (info != null) {
-            sender.sendCommand(Command.generate(Command.CommandType.COPY, info.getFileName()));
+        if (remoteFilesView.getSelectionModel().getSelectedItem().getType() == FileInfo.FileType.FILE) {
+            sender.sendCommand(Command.generate(Command.CommandType.COPY,
+                    remoteFilesView.getSelectionModel().getSelectedItem().getFileName()));
         }
     }
 }

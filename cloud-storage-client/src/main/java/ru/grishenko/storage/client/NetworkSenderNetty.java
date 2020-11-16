@@ -8,13 +8,18 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.serialization.ClassResolvers;
 import io.netty.handler.codec.serialization.ObjectDecoder;
 import io.netty.handler.codec.serialization.ObjectEncoder;
-import io.netty.handler.codec.string.StringDecoder;
-import io.netty.handler.codec.string.StringEncoder;
-import ru.grishenko.storage.client.handler.ChunkedFileInbounHandler;
 import ru.grishenko.storage.client.handler.CommandInboundHandler;
 import ru.grishenko.storage.client.helper.Command;
-import ru.grishenko.storage.client.helper.FileRequest;
+import ru.grishenko.storage.client.helper.FileInfo;
+import ru.grishenko.storage.client.helper.FileWrapper;
 import ru.grishenko.storage.client.interf.CallBack;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 public class NetworkSenderNetty {
 
@@ -60,7 +65,22 @@ public class NetworkSenderNetty {
         channel.writeAndFlush(command);
     }
 
-//    public void fileRequest(FileRequest fileRequest) {
-//        channel.writeAndFlush()
-//    }
+    public void sendFile(Path filePath, Command.CommandType type) {
+        try {
+            FileInputStream fis = new FileInputStream(filePath.toString());
+            int read;
+            int part = 1;
+            FileWrapper fw = new FileWrapper(filePath, type);
+
+            while ((read = fis.read(fw.getBuffer())) != -1) {
+                fw.setCurrentPart(part);
+                fw.setReadByte(read);
+                System.out.println(fw.toString());
+                channel.writeAndFlush(fw).sync();
+                part++;
+            }
+        } catch (IOException | InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
 }

@@ -3,11 +3,16 @@ package ru.grishenko.storage.server;
 import io.netty.channel.ChannelHandlerContext;
 
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.util.ReferenceCountUtil;
 import ru.grishenko.storage.client.helper.Command;
+import ru.grishenko.storage.client.helper.FileWrapper;
 import ru.grishenko.storage.server.exception.*;
 import ru.grishenko.storage.server.helper.AuthInfo;
 import ru.grishenko.storage.server.helper.Navigate;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -19,6 +24,7 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
     private Path userHome;
     private static final Path ROOT_PATH = Paths.get("");
     private Path currentDir;
+    private FileOutputStream fos;
 
 
     public ObjectCommandInputHandler(UserDAO userDAO) {
@@ -172,19 +178,50 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
                 }
 
                 case COPY: {
-//                    if (cmd.getArgs().length > 0 && cmd.getArgs()[0] != null && !cmd.getArgs()[0].equals("")) {
-//                        Path filePath = currentDir.resolve(cmd.getArgs()[0]);
-//                        if (Files.exists(filePath)) {
-//                            if (!Files.isDirectory(filePath)) {
-//                                FileRequest fr = new FileRequest(filePath.getFileName().toString());
-//                                fr.setFileSize(Files.size(filePath));
-//                                ctx.channel().writeAndFlush(fr);
-//                                new ChunkedFileServerHandler(ctx, new File(filePath.toString()));
-//                            }
-//                        }
-//                    }
+                    if (cmd.getArgs().length > 0 && cmd.getArgs()[0] != null && !cmd.getArgs()[0].equals("")) {
+                        Path filePath = currentDir.resolve(cmd.getArgs()[0]);
+                        FileInputStream fis = new FileInputStream(filePath.toString());
+                        int read;
+                        int part = 1;
+                        FileWrapper fw = new FileWrapper(filePath, Command.CommandType.COPY);
+
+                        while ((read = fis.read(fw.getBuffer())) != -1) {
+                            fw.setCurrentPart(part);
+                            fw.setReadByte(read);
+                            System.out.println(fw.toString());
+                            ctx.channel().writeAndFlush(fw).sync();
+                            part++;
+                        }
+                    }
                     break;
                 }
+            }
+        }
+
+        if (msg instanceof FileWrapper) {
+            FileWrapper fw = (FileWrapper) msg;
+            System.out.println(fw.toString());
+            if (fw.getType() == Command.CommandType.COPY) {
+                File file = new File(currentDir.resolve(fw.getFileName()).toString());
+                if (!file.exists()) {
+                    file.createNewFile();
+                }
+                if (fos == null) {
+                    fos = new FileOutputStream(file);
+
+                }
+                if (fos.getChannel().isOpen()) {
+                    fos.write(fw.getBuffer(),0,fw.getReadByte());
+                } else {
+                    fos = new FileOutputStream(file);
+                    fos.write(fw.getBuffer(), 0, fw.getReadByte());
+
+                }
+                if (fw.getCurrentPart() == fw.getParts()) {
+                    fos.close();
+                    ctx.channel().writeAndFlush(Command.generate(Command.CommandType.FILE_OPERATION_OK));
+                }
+
             }
         }
 

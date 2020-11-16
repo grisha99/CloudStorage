@@ -12,7 +12,8 @@ public class DBConnect {
 
     private DBConnect(){
 
-        String jdbcURL = "jdbc:sqlite:cloud-storage-server/DB/serverDB.sqlite";
+//        String jdbcURL = "jdbc:sqlite:cloud-storage-server/DB/serverDB.sqlite";
+        String jdbcURL = "jdbc:sqlite::resource:serverDB.sqlite";
         try {
             connection = DriverManager.getConnection(jdbcURL);
         } catch (SQLException e) {

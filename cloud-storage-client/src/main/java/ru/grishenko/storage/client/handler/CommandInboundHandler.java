@@ -14,10 +14,8 @@ public class CommandInboundHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-
         if (onMessageReceivedCallBack != null) {
             onMessageReceivedCallBack.callBack(msg);
         }
-        System.out.println("принял");
     }
 }

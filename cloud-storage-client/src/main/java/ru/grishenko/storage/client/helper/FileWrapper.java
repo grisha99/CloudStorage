@@ -1,5 +1,10 @@
 package ru.grishenko.storage.client.helper;
 
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import ru.grishenko.storage.client.Controller;
+
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.file.Files;
@@ -7,6 +12,8 @@ import java.nio.file.Path;
 import java.util.Objects;
 
 public class FileWrapper implements Serializable {
+
+    private static final Logger LOGGER = LogManager.getLogger(FileWrapper.class.getName());
 
     private static final int BUFFER_SIZE = 512; // размер буфера в байтах
 
@@ -22,6 +29,7 @@ public class FileWrapper implements Serializable {
         this.fileName = fileAbsolutePath.getFileName().toString();
         this.parts = (int) ((Files.size(fileAbsolutePath) + buffer.length) / BUFFER_SIZE);
         this.type = type;
+        LOGGER.log(Level.INFO, "FileWrapper created, FileName: \"" + this.fileName + "\", Parts: " + this.parts);
     }
 
     public String getFileName() {
@@ -58,6 +66,6 @@ public class FileWrapper implements Serializable {
 
     @Override
     public String toString() {
-        return String.format("Файл: %s; чайстей: %d; часть: %d; в буфере: %d", fileName, parts, currentPart, readByte);
+        return String.format("Файл: %s; чайстей: %d; часть: %d; буфер: %d bytes", fileName, parts, currentPart, readByte);
     }
 }

@@ -21,12 +21,14 @@
                <RowConstraints minHeight="10.0" vgrow="SOMETIMES" />
             </rowConstraints>
             <children>
-                  <Label text="Локальный компьютер" GridPane.halignment="CENTER" />
+                  <Label text="Локальный компьютер" GridPane.halignment="CENTER">
+                  <GridPane.margin>
+                     <Insets top="5.0" />
+                  </GridPane.margin></Label>
             </children>
          </GridPane>
             <HBox>
                 <ComboBox fx:id="disksBox" onAction="#disksBoxAction" />
-                <Button fx:id="btnLocalUp" onAction="#btnLocalUpAction" text="Вверх" />
                 <TextField fx:id="localPathField" editable="false" HBox.hgrow="ALWAYS" />
             </HBox>
             <TableView fx:id="localFilesView" onContextMenuRequested="#requestPopup" onMouseClicked="#localTableMouseDblClick" VBox.vgrow="ALWAYS">
@@ -120,10 +122,9 @@
             </VBox>
             <VBox fx:id="workLayer" disable="true" VBox.vgrow="ALWAYS">
                 <HBox>
-                    <ComboBox />
                     <TextField fx:id="remotePathField" editable="false" HBox.hgrow="ALWAYS">
                   <HBox.margin>
-                     <Insets left="5.0" right="5.0" />
+                     <Insets right="5.0" />
                   </HBox.margin></TextField>
                 </HBox>
                 <TableView fx:id="remoteFilesView" onContextMenuRequested="#requestPopup" onMouseClicked="#remoteTableMouseDblClick" VBox.vgrow="ALWAYS">

@@ -15,7 +15,6 @@
         <Logger name="grishenko.cloudServer" level="debug" />
         <Root level="info">
             <AppenderRef ref="STDOUT" />
-            <AppenderRef ref="FILE" />
         </Root>
     </Loggers>
 </Configuration>

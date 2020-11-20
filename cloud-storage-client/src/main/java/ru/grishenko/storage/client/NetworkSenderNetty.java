@@ -84,9 +84,14 @@ public class NetworkSenderNetty {
                 part++;
             }
             fis.close();
+            if (type == Command.CommandType.MOVE) {
+                Files.delete(filePath);
+                LOGGER.log(Level.INFO, "Delete after send complete: " + fw.toString());
+            }
         } catch (IOException | InterruptedException e) {
             LOGGER.log(Level.ERROR, e);
         }
+
     }
 
     public void close() {

@@ -6,6 +6,7 @@ import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.control.*;
 import javafx.scene.input.ContextMenuEvent;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.VBox;
@@ -34,20 +35,25 @@ public class Controller implements Initializable {
 
     private static final Logger LOGGER = LogManager.getLogger(Controller.class.getName());
 
-    @FXML
-    ContextMenu cmTF;
+    private static final Path homePath = Paths.get(System.getProperty("user.home"));
+
+//    @FXML
+//    ContextMenu cmTF;
 
     @FXML
-    Button uploadButton;
+    Button remoteRefresh;
 
     @FXML
-    Button downloadButton;
+    Button localRefresh;
+
+    @FXML
+    MenuButton uploadMenuButton;
+
+    @FXML
+    MenuButton downloadMenuButton;
 
     @FXML
     TableView<FileInfo> localFilesView;
-
-    @FXML
-    VBox centerPanel;
 
     @FXML
     TableView<FileInfo> remoteFilesView;
@@ -80,6 +86,8 @@ public class Controller implements Initializable {
     private NetworkSenderNetty sender;
     private FileOutputStream fos;
 
+    private boolean upDiskChange;       // флаг изменен диск из списка, или програмно
+
     public void menuExitClick(ActionEvent actionEvent) {
         sender.close();
         Platform.exit();
@@ -88,31 +96,25 @@ public class Controller implements Initializable {
     @Override
     public void initialize(URL location, ResourceBundle resources) {
 
-        LOGGER.log(Level.INFO, "Client Apploication Start");
+        LOGGER.log(Level.INFO, "Client Application Start");
 
         isAuthOK = false;
+        upDiskChange = true;
 
-        localFilesView.getColumns().addAll(TableInitializer.getColumns());
-        localFilesView.getSortOrder().add((localFilesView.getColumns()).get(0));
+        TableInitializer.initTableView(localFilesView);
         LOGGER.log(Level.INFO, "Local table INIT");
 
-        remoteFilesView.getColumns().addAll(TableInitializer.getColumns());
-        remoteFilesView.getSortOrder().add((remoteFilesView.getColumns()).get(0));
+        TableInitializer.initTableView(remoteFilesView);
         LOGGER.log(Level.INFO, "Remote table INIT");
 
         disksBox.getItems().clear();
         for (Path p : FileSystems.getDefault().getRootDirectories()) {
             disksBox.getItems().add(p.toString());
         }
-        String rootDisk = Paths.get(".").toAbsolutePath().getRoot().toString();
-        for (int i = 0; i < disksBox.getItems().size(); i++) {
-            if (disksBox.getItems().get(i).equals(rootDisk)) {
-                disksBox.getSelectionModel().select(i);
-                break;
-            }
-        }
 
-        updateFileList(Paths.get("."));
+        uploadMenuButton.setDisable(true);
+
+        updateFileList(homePath);
 
         sender = new NetworkSenderNetty((args) -> {
 
@@ -124,7 +126,8 @@ public class Controller implements Initializable {
                         authLayer.setVisible(false);
                         authLayer.setManaged(false);
                         workLayer.setDisable(false);
-                        centerPanel.setDisable(false);
+//                        centerPanel.setDisable(false);
+                        uploadMenuButton.setDisable(false);
                         remotePathField.setText(cmd.getArgs()[0]);
                         sender.sendCommand(Command.generate(Command.CommandType.LIST));
                         LOGGER.log(Level.INFO, "AUTH successful. Login: " + cmd.getArgs()[0]);
@@ -157,7 +160,7 @@ public class Controller implements Initializable {
             if (args[0] instanceof FileWrapper) {
                 FileWrapper fw = (FileWrapper) args[0];
                 try {
-                    if (fw.getType() == Command.CommandType.COPY) {
+//                    if (fw.getType() == Command.CommandType.COPY) {
                         File file = new File(getCurrentPath().resolve(fw.getFileName()).toString());
                         if (!file.exists()) {
                             file.createNewFile();
@@ -179,7 +182,7 @@ public class Controller implements Initializable {
                             updateFileList(getCurrentPath());
                         }
 
-                    }
+//                    }
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -206,8 +209,12 @@ public class Controller implements Initializable {
             }
             localFilesView.getItems().addAll(Files.list(path).map(FileInfo :: new).collect(Collectors.toList()));
             localFilesView.sort();
+            upDiskChange = false;
+            disksBox.getSelectionModel().select(getDiskNumFromPath(path));
+            upDiskChange = true;
         } catch (IOException e) {
-            LOGGER.log(Level.ERROR, "Не удалось обновить список файлов по пути: " + path.toString());
+            LOGGER.log(Level.ERROR, "Refresh file list error, path: : " + path.toString());
+            LOGGER.log(Level.ERROR, e);
             Alert alert = new Alert(Alert.AlertType.WARNING, "Не удалось обновить список файлов по пути: " + path.toString(), ButtonType.OK);
             alert.showAndWait();
         }
@@ -227,22 +234,27 @@ public class Controller implements Initializable {
     }
 
     public void disksBoxAction(ActionEvent actionEvent) {
-        ComboBox<String> selectDisk = (ComboBox<String>) actionEvent.getSource();
-        updateFileList(Paths.get(selectDisk.getSelectionModel().getSelectedItem()));
+        if (upDiskChange) {
+            ComboBox<String> selectDisk = (ComboBox<String>) actionEvent.getSource();
+            updateFileList(Paths.get(selectDisk.getSelectionModel().getSelectedItem()));
+        }
     }
 
     public void localTableMouseDblClick(MouseEvent mouseEvent) {
+        switchTransferAction(localFilesView);
         if (mouseEvent.getButton() == MouseButton.PRIMARY) {
-            cmTF.hide();
+//            cmTF.hide();
             if (mouseEvent.getClickCount() == 2) {
-                if (!getSelectedFileName(true).equals("...") ||
-                        localFilesView.getSelectionModel().getSelectedIndex() > 0) {
-                    Path path = Paths.get(localPathField.getText()).resolve(getSelectedFileName(true));
-                    if (Files.isDirectory(path)) {
+                switch (localFilesView.getSelectionModel().getSelectedItem().getType()) {
+                    case DIRECTORY: {
+                        Path path = Paths.get(localPathField.getText()).resolve(getSelectedFileName(true));
                         updateFileList(path);
+                        break;
                     }
-                } else {
-                    pathUp(null);
+                    case UP_FOLDER: {
+                        pathUp(null);
+                        break;
+                    }
                 }
             }
         }
@@ -267,7 +279,7 @@ public class Controller implements Initializable {
 
     public void sendRegisterAction(ActionEvent actionEvent) {
         String login = userNameField.getText().trim().equals("") ? null : userNameField.getText().trim();
-        String pass = userPassField.getText().trim().equals("") ? null : userNameField.getText().trim();
+        String pass = userPassField.getText().trim().equals("") ? null : userPassField.getText().trim();
         if (login != null && pass != null) {
             LOGGER.log(Level.INFO, "REGISTER info send");
             sender.sendCommand(Command.generate(Command.CommandType.REGISTER, login, pass));
@@ -278,100 +290,110 @@ public class Controller implements Initializable {
     }
 
     public void remoteTableMouseDblClick(MouseEvent mouseEvent) {
+        switchTransferAction(remoteFilesView);
         if (mouseEvent.getButton() == MouseButton.PRIMARY) {
-            cmTF.hide();
+//            cmTF.hide();
             if (mouseEvent.getClickCount() == 2) {
-                if (!getSelectedFileName(false).equals("...") ||
-                        remoteFilesView.getSelectionModel().getSelectedIndex() > 0) {
-                    if (remoteFilesView.getSelectionModel().getSelectedItem().getType() == FileInfo.FileType.DIRECTORY) {
+                switch (remoteFilesView.getSelectionModel().getSelectedItem().getType()) {
+                    case DIRECTORY: {
                         sender.sendCommand(Command.generate(Command.CommandType.CD,
                                 getSelectedFileName(false)));
+                        break;
                     }
-                    ;
-                } else {
-                    sender.sendCommand(Command.generate(Command.CommandType.UPCD));
+                    case UP_FOLDER: {
+                        sender.sendCommand(Command.generate(Command.CommandType.CD_UP));
+                        break;
+                    }
                 }
             }
         }
+    }
+
+    public void pathUpRemote(ActionEvent actionEvent) {
+        sender.sendCommand(Command.generate(Command.CommandType.CD_UP));
     }
 
     public void requestPopup(ContextMenuEvent contextMenuEvent) {
-        if (localFilesView.isFocused()) {
-            cmTF.show(localFilesView, contextMenuEvent.getScreenX(), contextMenuEvent.getScreenY());
-        }
-        if (remoteFilesView.isFocused()) {
-            cmTF.show(remoteFilesView, contextMenuEvent.getScreenX(), contextMenuEvent.getScreenY());
-        }
+//        if (localFilesView.isFocused()) {
+//            cmTF.show(localFilesView, contextMenuEvent.getScreenX(), contextMenuEvent.getScreenY());
+//        }
+//        if (remoteFilesView.isFocused()) {
+//            cmTF.show(remoteFilesView, contextMenuEvent.getScreenX(), contextMenuEvent.getScreenY());
+//        }
     }
 
     public void createFileAction(ActionEvent actionEvent) throws IOException {
-        String newFileName = showInputDialog("Создание файла", "Укажите имя файла", "Имя файла: ");
+        String newFileName = showInputDialog("Создание файла", "Укажите имя файла", "Имя файла: ", null);
         if (newFileName != null) {
-            if (localFilesView.isFocused()) {
-                Path newFilePath = Paths.get(localPathField.getText()).resolve(newFileName);
-                if (!Files.exists(newFilePath)) {
-                    Files.createFile(newFilePath);
-                    LOGGER.log(Level.INFO, "File \"" + newFileName + "\" created successful");
-                } else {
-                    LOGGER.log(Level.ERROR, "File with name \"" + newFileName + "\" already exist");
-                    Alert alert = new Alert(Alert.AlertType.ERROR, "Файл с таким именем уже существует", ButtonType.OK);
-                    alert.showAndWait();
-                }
-                updateFileList(Paths.get(localPathField.getText()));
-
+            Path newFilePath = Paths.get(localPathField.getText()).resolve(newFileName);
+            if (!Files.exists(newFilePath)) {
+                Files.createFile(newFilePath);
+                LOGGER.log(Level.INFO, "File \"" + newFileName + "\" created successful");
+            } else {
+                LOGGER.log(Level.ERROR, "File with name \"" + newFileName + "\" already exist");
+                Alert alert = new Alert(Alert.AlertType.ERROR, "Файл с таким именем уже существует", ButtonType.OK);
+                alert.showAndWait();
             }
-            if (remoteFilesView.isFocused()) {
-                sender.sendCommand(Command.generate(Command.CommandType.TOUCH, newFileName));
-            }
+            updateFileList(Paths.get(localPathField.getText()));
+        }
+    }
+    public void createFileRemoteAction(ActionEvent actionEvent) {
+        String newFileName = showInputDialog("Создание файла", "Укажите имя файла", "Имя файла: ", null);
+        if (newFileName != null) {
+            LOGGER.log(Level.INFO, "File \"" + newFileName + "\" creat command send");
+            sender.sendCommand(Command.generate(Command.CommandType.TOUCH, newFileName));
         }
     }
 
     public void createDirAction(ActionEvent actionEvent) throws IOException {
-        String newDirName = showInputDialog("Создание каталога", "Укажите имя каталога", "Имя каталога: ");
+        String newDirName = showInputDialog("Создание каталога", "Укажите имя каталога", "Имя каталога: ", null);
         if (newDirName != null) {
-            if (localFilesView.isFocused()) {
-
-                Path newFilePath = Paths.get(localPathField.getText()).resolve(newDirName);
-                if (!Files.exists(newFilePath)) {
-                    Files.createDirectory(newFilePath);
-                    LOGGER.log(Level.INFO, "Directory \"" + newDirName + "\" created successful");
-                } else {
-                    LOGGER.log(Level.ERROR, "Directory with name \"" + newDirName + "\" already exist");
-                    Alert alert = new Alert(Alert.AlertType.ERROR, "Каталог с таким именем уже существует", ButtonType.OK);
-                    alert.showAndWait();
-                }
-                updateFileList(Paths.get(localPathField.getText()));
-
+            Path newFilePath = Paths.get(localPathField.getText()).resolve(newDirName);
+            if (!Files.exists(newFilePath)) {
+                Files.createDirectory(newFilePath);
+                LOGGER.log(Level.INFO, "Directory \"" + newDirName + "\" created successful");
+            } else {
+                LOGGER.log(Level.ERROR, "Directory with name \"" + newDirName + "\" already exist");
+                Alert alert = new Alert(Alert.AlertType.ERROR, "Каталог с таким именем уже существует", ButtonType.OK);
+                alert.showAndWait();
             }
-            if (remoteFilesView.isFocused()) {
-                sender.sendCommand(Command.generate(Command.CommandType.MKDIR, newDirName));
-            }
+            updateFileList(Paths.get(localPathField.getText()));
+        }
+    }
+
+    public void createDirRemoteAction(ActionEvent actionEvent) {
+        String newDirName = showInputDialog("Создание каталога", "Укажите имя каталога", "Имя каталога: ", null);
+        if (newDirName != null) {
+            LOGGER.log(Level.INFO, "Directory \"" + newDirName + "\" creat command send");
+            sender.sendCommand(Command.generate(Command.CommandType.MKDIR, newDirName));
         }
     }
 
     public void renameAction(ActionEvent actionEvent) throws IOException {
-        String newFileName = showInputDialog("Переименование...", "Укажите новое имя", "Новое имя: ");
+        String oldFileName = getSelectedFileName(true);
+        String newFileName = showInputDialog("Переименование...", "Укажите новое имя", "Новое имя: ", oldFileName);
         if (newFileName != null) {
-            if (localFilesView.isFocused()) {
-
-                Path newFilePath = Paths.get(localPathField.getText()).resolve(newFileName);
-                Path oldFilePath = Paths.get(localPathField.getText())
-                        .resolve(getSelectedFileName(true));
-                if (!Files.exists(newFilePath) && Files.exists(oldFilePath)) {
-                    Files.move(oldFilePath, newFilePath);
-                    LOGGER.log(Level.INFO, "Object renamed: Old name \"" + getSelectedFileName(true) + "\", New name \"" + newFileName + "\"");
-                } else {
-                    LOGGER.log(Level.ERROR, "Object with name \"" + newFileName + "\" already exist");
-                    Alert alert = new Alert(Alert.AlertType.ERROR, "Объекта с таким именем уже сущесвует", ButtonType.OK);
-                    alert.showAndWait();
-                }
-                updateFileList(Paths.get(localPathField.getText()));
-
+            Path newFilePath = Paths.get(localPathField.getText()).resolve(newFileName);
+            Path oldFilePath = Paths.get(localPathField.getText())
+                    .resolve(oldFileName);
+            if (!Files.exists(newFilePath) && Files.exists(oldFilePath)) {
+                Files.move(oldFilePath, newFilePath);
+                LOGGER.log(Level.INFO, "Object renamed: Old name \"" + getSelectedFileName(true) + "\", New name \"" + newFileName + "\"");
+            } else {
+                LOGGER.log(Level.ERROR, "Object with name \"" + newFileName + "\" already exist");
+                Alert alert = new Alert(Alert.AlertType.ERROR, "Объекта с таким именем уже сущесвует", ButtonType.OK);
+                alert.showAndWait();
             }
-            if (remoteFilesView.isFocused()) {
-                String oldFileName = getSelectedFileName(false);
-                sender.sendCommand(Command.generate(Command.CommandType.REN, oldFileName, newFileName));
-            }
+            updateFileList(Paths.get(localPathField.getText()));
+         }
+    }
+
+    public void renameRemoteAction(ActionEvent actionEvent) {
+        String oldFileName = getSelectedFileName(false);
+        String newFileName = showInputDialog("Переименование...", "Укажите новое имя", "Новое имя: ", oldFileName);
+        if (newFileName != null) {
+            LOGGER.log(Level.INFO, "Rename command send");
+            sender.sendCommand(Command.generate(Command.CommandType.REN, oldFileName, newFileName));
         }
     }
 
@@ -390,14 +412,6 @@ public class Controller implements Initializable {
                     updateFileList(Paths.get(localPathField.getText()));
                 }
             }
-            if (remoteFilesView.isFocused()) {
-                String toDeleteFile = getSelectedFileName(false);
-                Alert alert = new Alert(Alert.AlertType.CONFIRMATION, "Удалить файл \"" + toDeleteFile + "\"?", ButtonType.OK, ButtonType.CANCEL);
-                Optional<ButtonType> option = alert.showAndWait();
-                if (option.get() == ButtonType.OK) {
-                    sender.sendCommand(Command.generate(Command.CommandType.DEL, toDeleteFile));
-                }
-            }
         } catch (NullPointerException e) {
             LOGGER.log(Level.ERROR, e);
             Alert alert = new Alert(Alert.AlertType.WARNING, "Не выбран элемент для удаления", ButtonType.OK);
@@ -407,8 +421,18 @@ public class Controller implements Initializable {
         }
     }
 
-    private String showInputDialog(String title, String header, String message) {
-        TextInputDialog dialog = new TextInputDialog();
+    public void deleteRemoteAction(ActionEvent actionEvent) {
+        String toDeleteFile = getSelectedFileName(false);
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION, "Удалить файл \"" + toDeleteFile + "\"?", ButtonType.OK, ButtonType.CANCEL);
+        Optional<ButtonType> option = alert.showAndWait();
+        if (option.get() == ButtonType.OK) {
+            LOGGER.log(Level.INFO, "Delete command send");
+            sender.sendCommand(Command.generate(Command.CommandType.DEL, toDeleteFile));
+        }
+    }
+
+    private String showInputDialog(String title, String header, String message, String defaultText) {
+        TextInputDialog dialog = new TextInputDialog(defaultText);
 
         dialog.setTitle(title);
         dialog.setHeaderText(header);
@@ -419,12 +443,20 @@ public class Controller implements Initializable {
     }
 
     public void uploadAction(ActionEvent actionEvent) throws IOException {
+        fileUploader(Command.CommandType.COPY);
+    }
+
+    public void uploadDelAction(ActionEvent actionEvent) {
+        fileUploader(Command.CommandType.MOVE);
+        updateFileList(getCurrentPath());
+    }
+
+    private void fileUploader(Command.CommandType type) {
         Path filePath = Paths.get(localPathField.getText()).
                 resolve(getSelectedFileName(true));
         if (Files.exists(filePath) && !Files.isDirectory(filePath)) {
             LOGGER.log(Level.INFO, "Upload transfer BEGIN, file name: " + filePath.getFileName());
-            sender.sendFile(filePath, Command.CommandType.COPY);
-
+            sender.sendFile(filePath, type);
         } else {
             LOGGER.log(Level.ERROR, "File for upload not selected");
             Alert alert = new Alert(Alert.AlertType.WARNING, "Не выбран файл для загрузки", ButtonType.OK);
@@ -433,21 +465,100 @@ public class Controller implements Initializable {
     }
 
     public void downloadAction(ActionEvent actionEvent) throws IOException {
+        fileDownloader(Command.CommandType.COPY);
+    }
+
+    public void downloadDelAction(ActionEvent actionEvent) throws IOException {
+        fileDownloader(Command.CommandType.MOVE);
+    }
+
+    private void fileDownloader(Command.CommandType type) throws IOException {
         if (remoteFilesView.getSelectionModel().getSelectedItem().getType() == FileInfo.FileType.FILE) {
             if (remoteFilesView.getSelectionModel().getSelectedItem().getSize() > 0) {
-                sender.sendCommand(Command.generate(Command.CommandType.COPY, getSelectedFileName(false)));
+                sender.sendCommand(Command.generate(type, getSelectedFileName(false)));
                 LOGGER.log(Level.INFO, "Send command to download, file name: " + getSelectedFileName(false));
             } else {
-                    Path newFilePath = Paths.get(localPathField.getText()).resolve(getSelectedFileName(false));
-                    if (!Files.exists(newFilePath)) {
-                        Files.createFile(newFilePath);
-                    } else {
-                        LOGGER.log(Level.INFO, "File with name \"" + getSelectedFileName(false) + "\" already exist");
-                        Alert alert = new Alert(Alert.AlertType.ERROR, "Файл с таким именем уже существует", ButtonType.OK);
-                        alert.showAndWait();
-                    }
-                    updateFileList(Paths.get(localPathField.getText()));
+                Path newFilePath = Paths.get(localPathField.getText()).resolve(getSelectedFileName(false));
+                if (!Files.exists(newFilePath)) {
+                    Files.createFile(newFilePath);
+                } else {
+                    LOGGER.log(Level.INFO, "File with name \"" + getSelectedFileName(false) + "\" already exist");
+                    Alert alert = new Alert(Alert.AlertType.ERROR, "Файл с таким именем уже существует", ButtonType.OK);
+                    alert.showAndWait();
+                }
+                updateFileList(Paths.get(localPathField.getText()));
             }
         }
     }
+
+    public void localRefreshAction(ActionEvent actionEvent) {
+            int row = localFilesView.getSelectionModel().getSelectedIndex();
+            updateFileList(getCurrentPath());
+            if (localFilesView.getItems().size() >= row) {
+                localFilesView.getSelectionModel().select(row);
+            } else {
+                localFilesView.getSelectionModel().select(0);
+            }
+    }
+
+    public void remoteRefreshAction(ActionEvent actionEvent) {
+        sender.sendCommand(Command.generate(Command.CommandType.LIST));
+    }
+
+    public void toHomeDir(ActionEvent actionEvent) {
+        updateFileList(homePath);
+    }
+
+    public int getDiskNumFromPath(Path path) {
+        String rootDisk = path.toAbsolutePath().getRoot().toString();
+        for (int i = 0; i < disksBox.getItems().size(); i++) {
+            if (disksBox.getItems().get(i).equals(rootDisk)) {
+                return i;
+            }
+        }
+        return 1;
+    }
+
+    public void toRootDir(ActionEvent actionEvent) {
+        Path rootPath = getCurrentPath().toAbsolutePath().getRoot();
+        updateFileList(rootPath);
+    }
+
+
+    public void toRootDirRemote(ActionEvent actionEvent) {
+        sender.sendCommand(Command.generate(Command.CommandType.CD_ROOT));
+    }
+
+    public void toHomeDirRemote(ActionEvent actionEvent) {
+        //todo add functional for user home dir on remote
+        sender.sendCommand(Command.generate(Command.CommandType.CD_ROOT));
+    }
+
+
+    public void onKeyRealisedLocalAction(KeyEvent keyEvent) {
+        switchTransferAction(localFilesView);
+    }
+
+
+    public void onKeyRealisedRemoteAction(KeyEvent keyEvent) {
+        switchTransferAction(remoteFilesView);
+    }
+
+
+    private void switchTransferAction(TableView<FileInfo> table) {
+        boolean isDisabled;
+        if (table.getSelectionModel().getSelectedItem() == null) {
+            isDisabled = true;
+        } else {
+            isDisabled = !(table.getSelectionModel().getSelectedItem().getType() == FileInfo.FileType.FILE && isAuthOK);
+        }
+        if (table.getId().equals("localFilesView")) {
+            uploadMenuButton.setDisable(isDisabled);
+        }
+        if (table.getId().equals("remoteFilesView")) {
+            downloadMenuButton.setDisable(isDisabled);
+        }
+    }
+
+
 }

@@ -10,7 +10,7 @@ import java.time.ZoneOffset;
 public class FileInfo implements Serializable {
 
     public enum FileType {
-        FILE("F"), DIRECTORY("D");
+        FILE("F"), DIRECTORY("D"), UP_FOLDER("U");
 
         private String name;
 
@@ -28,11 +28,12 @@ public class FileInfo implements Serializable {
     private long size;
     private LocalDateTime modified;
 
+    // констуктор элемента для перехода в директорию на уровень выше
     public FileInfo() {
         this.fileName = "...";
-        this.type = FileType.DIRECTORY;
-        this.size = -1L;
-        this.modified = LocalDateTime.now();
+        this.type = FileType.UP_FOLDER;
+        this.size = -2L;
+        this.modified = LocalDateTime.of(0000,01,01,00,00,00);  // такая дата не бцдет отображена в таблице
 
     }
     public FileInfo(Path path){

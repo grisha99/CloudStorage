@@ -3,7 +3,6 @@ package ru.grishenko.storage.server;
 import io.netty.channel.ChannelHandlerContext;
 
 import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.util.ReferenceCountUtil;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -25,8 +24,8 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
     private static final Logger LOGGER = LogManager.getLogger(ObjectCommandInputHandler.class.getName());
 
     private UserDAO userDAO;
-    private Path userHome;
-    private static final Path ROOT_PATH = Paths.get("");
+    private Path userRoot;
+    private static final Path ROOT_SERVER = Paths.get("");
     private Path currentDir;
     private FileOutputStream fos;
 
@@ -61,11 +60,11 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
                         AuthInfo authInfo = new AuthInfo(cmd.getArgs());
 
                         if (userDAO.checkUser(authInfo.getName(), authInfo.getPass())) {
-                            userHome = ROOT_PATH.resolve(authInfo.getName());
-                            if (!Files.exists(userHome)) {
-                                Files.createDirectory(userHome);
+                            userRoot = ROOT_SERVER.resolve(authInfo.getName());
+                            if (!Files.exists(userRoot)) {
+                                Files.createDirectory(userRoot);
                             }
-                            currentDir = Paths.get(userHome.toString());
+                            currentDir = Paths.get(userRoot.toString());
 
                             ctx.channel().writeAndFlush(Command.generate(Command.CommandType.AUTH_OK, currentDir.toString()));
                             LOGGER.log(Level.INFO, "Client AUTHORIZED by \"" + authInfo.getName() + "\"");
@@ -77,7 +76,7 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
                             | UserPassException
                             | DBConnectException
                             | ReadResultSetException e) {
-                        LOGGER.log(Level.ERROR, e.getMessage());
+                        LOGGER.log(Level.ERROR, e);
                         ctx.channel().writeAndFlush(Command.generate(Command.CommandType.ERROR, e.getMessage()));
                     }
                     break;
@@ -86,22 +85,22 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
                 case REGISTER: {
                     try {
                         userDAO.registerUser(cmd.getArgs()[0], cmd.getArgs()[1]);
-                        userHome = ROOT_PATH.resolve(cmd.getArgs()[0]);
-                        if (!Files.exists(userHome)) {
-                            Files.createDirectory(userHome);
+                        userRoot = ROOT_SERVER.resolve(cmd.getArgs()[0]);
+                        if (!Files.exists(userRoot)) {
+                            Files.createDirectory(userRoot);
                         }
-                        currentDir = Paths.get(userHome.toString());
+                        currentDir = Paths.get(userRoot.toString());
                         LOGGER.log(Level.INFO, "Client REGISTER by \"" + cmd.getArgs()[0] + "\"");
                         ctx.channel().writeAndFlush(Command.generate(Command.CommandType.AUTH_OK, currentDir.toString()));
                     } catch (UserExistsException e) {
-                        LOGGER.log(Level.ERROR, e.getMessage());
+                        LOGGER.log(Level.ERROR, e);
                         ctx.channel().writeAndFlush(Command.generate(Command.CommandType.ERROR, e.getMessage()));
                     }
                     break;
                 }
 
                 case LIST: {
-                    ctx.channel().writeAndFlush(Navigate.getFileList(currentDir, userHome));
+                    ctx.channel().writeAndFlush(Navigate.getFileList(currentDir, userRoot));
                     break;
                 }
                 case CD: {
@@ -110,13 +109,20 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
                     break;
                 }
 
-                case UPCD: {
+                case CD_UP: {
                     if (currentDir.getParent() != null) {
                         currentDir = currentDir.getParent();
                         ctx.channel().writeAndFlush(Command.generate(Command.CommandType.CD_OK, currentDir.toString()));
                     } else {
-                        ctx.channel().writeAndFlush(Command.generate(Command.CommandType.ERROR, "Достигнута ваша домашняя директория."));
+                        ctx.channel().writeAndFlush(Command.generate(Command.CommandType.ERROR, "Достигнута крневая директория."));
                     }
+                    break;
+                }
+
+                case CD_HOME: // todo add functional for user home directory
+                case CD_ROOT: {
+                    currentDir = userRoot;
+                    ctx.channel().writeAndFlush(Command.generate(Command.CommandType.CD_OK, currentDir.toString()));
                     break;
                 }
 
@@ -197,6 +203,7 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
                     break;
                 }
 
+                case MOVE:
                 case COPY: {
                     if (cmd.getArgs().length > 0 && cmd.getArgs()[0] != null && !cmd.getArgs()[0].equals("")) {
                         Path filePath = currentDir.resolve(cmd.getArgs()[0]);
@@ -213,6 +220,11 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
                         }
                         LOGGER.log(Level.INFO, "Send complete: " + fw.toString());
                         fis.close();
+                        if (cmd.getType() == Command.CommandType.MOVE) {
+                            Files.delete(filePath);
+                            LOGGER.log(Level.INFO, "Delete after send complete: " + fw.toString());
+                            ctx.channel().writeAndFlush(Command.generate(Command.CommandType.FILE_OPERATION_OK));
+                        }
                     }
                     break;
                 }
@@ -221,8 +233,8 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
 
         if (msg instanceof FileWrapper) {
             FileWrapper fw = (FileWrapper) msg;
-            if (fw.getType() == Command.CommandType.COPY) {
-                File file = new File(currentDir.resolve(fw.getFileName()).toString());
+//            if (fw.getType() == Command.CommandType.COPY) {
+            File file = new File(currentDir.resolve(fw.getFileName()).toString());
                 if (!file.exists()) {
                     file.createNewFile();
                 }
@@ -232,6 +244,7 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
                 }
                 if (fos.getChannel().isOpen()) {
                     fos.write(fw.getBuffer(),0,fw.getReadByte());
+
                 } else {
                     fos = new FileOutputStream(file);
                     fos.write(fw.getBuffer(), 0, fw.getReadByte());
@@ -243,7 +256,7 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
                     ctx.channel().writeAndFlush(Command.generate(Command.CommandType.FILE_OPERATION_OK));
                 }
 
-            }
+//            }
         }
 
     }

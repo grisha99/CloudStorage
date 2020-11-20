@@ -14,7 +14,7 @@ public class ClientApp extends Application {
         Parent root = loader.load();
         Controller controller = loader.getController();
         primaryStage.setTitle("Клиент облачного хранилища");
-        primaryStage.setScene(new Scene(root, 1024, 600));
+        primaryStage.setScene(new Scene(root, 1060, 600));
 
         primaryStage.setOnHidden(e -> controller.menuExitClick(null));
 

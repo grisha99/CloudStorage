@@ -8,22 +8,26 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.serialization.ClassResolvers;
 import io.netty.handler.codec.serialization.ObjectDecoder;
 import io.netty.handler.codec.serialization.ObjectEncoder;
-import io.netty.handler.codec.string.StringDecoder;
-import io.netty.handler.codec.string.StringEncoder;
-import ru.grishenko.storage.client.handler.ChunkedFileInbounHandler;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import ru.grishenko.storage.client.handler.CommandInboundHandler;
 import ru.grishenko.storage.client.helper.Command;
-import ru.grishenko.storage.client.helper.FileRequest;
+import ru.grishenko.storage.client.helper.FileWrapper;
 import ru.grishenko.storage.client.interf.CallBack;
+
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 public class NetworkSenderNetty {
 
-    private SocketChannel channel;
-//    private CallBack onMessageReceivedCallBack;
+    private static final Logger LOGGER = LogManager.getLogger(NetworkSenderNetty.class.getName());
 
+    private SocketChannel channel;
 
     public NetworkSenderNetty(CallBack onMessageReceivedCallBack) {
-//        this.onMessageReceivedCallBack = onMessageReceivedCallBack;
         Thread t = new Thread(() -> {
             EventLoopGroup workerGroup = new NioEventLoopGroup();
 
@@ -38,29 +42,55 @@ public class NetworkSenderNetty {
                                 socketChannel.pipeline().addLast(
                                         new ObjectDecoder(ClassResolvers.cacheDisabled(null)),
                                         new ObjectEncoder(),
-//                                        new ChunkedFileInbounHandler(),
                                         new CommandInboundHandler(onMessageReceivedCallBack)
 
                                 );
                             }
                         });
                 ChannelFuture future = bsb.connect("localhost", 8189).sync();
+                LOGGER.log(Level.INFO, "Channel connected");
                 future.channel().closeFuture().sync();
             } catch (Exception e) {
-                e.printStackTrace();
+                LOGGER.log(Level.ERROR, e);
             } finally {
                 workerGroup.shutdownGracefully();
+                LOGGER.log(Level.INFO, "PipeLine group close.");
             }
         });
         t.setDaemon(true);
         t.start();
+        LOGGER.log(Level.INFO, "Service Start");
     }
 
     public void sendCommand(Command command) {
         channel.writeAndFlush(command);
     }
 
-//    public void fileRequest(FileRequest fileRequest) {
-//        channel.writeAndFlush()
-//    }
+    public void sendFile(Path filePath, Command.CommandType type) {
+        try {
+            if (Files.size(filePath) == 0) {
+                sendCommand(Command.generate(Command.CommandType.TOUCH, filePath.getFileName().toString()));
+                return;
+            }
+            FileInputStream fis = new FileInputStream(filePath.toString());
+            int read;
+            int part = 1;
+            FileWrapper fw = new FileWrapper(filePath, type);
+
+            while ((read = fis.read(fw.getBuffer())) != -1) {
+                fw.setCurrentPart(part);
+                fw.setReadByte(read);
+                channel.writeAndFlush(fw).sync();
+                part++;
+            }
+            fis.close();
+        } catch (IOException | InterruptedException e) {
+            LOGGER.log(Level.ERROR, e);
+        }
+    }
+
+    public void close() {
+        channel.close();
+        LOGGER.log(Level.INFO, "Channel close");
+    }
 }

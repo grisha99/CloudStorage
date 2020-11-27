@@ -20,6 +20,8 @@ public class Command implements Serializable {
         COPY("/copy %s"),                       // копирование файла
         MOVE("/move %s"),                       // перемещение файла
 
+        SWITCH_FEED_BACK("/noFeedBack"),        // переключение сервера в режим "без ответа" при копировании каталогов
+
         AUTH_OK("/authOK %s"),                  // удачная авторизация
         CD_OK("/cdOK %s"),                      // удачный переход в директорию
         FILE_OPERATION_OK("/fOperationOK %s"),  // удачная операция с фалами (создание, переименованиеб удаление)

@@ -22,13 +22,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URL;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.List;
-import java.util.Optional;
-import java.util.ResourceBundle;
+import java.nio.file.*;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class Controller implements Initializable {
@@ -87,6 +82,7 @@ public class Controller implements Initializable {
     private FileOutputStream fos;
 
     private boolean upDiskChange;       // флаг изменен диск из списка, или програмно
+    private boolean isDirCopy;
 
     public void menuExitClick(ActionEvent actionEvent) {
         sender.close();
@@ -100,6 +96,7 @@ public class Controller implements Initializable {
 
         isAuthOK = false;
         upDiskChange = true;
+        isDirCopy = false;
 
         TableInitializer.initTableView(localFilesView);
         LOGGER.log(Level.INFO, "Local table INIT");
@@ -126,7 +123,6 @@ public class Controller implements Initializable {
                         authLayer.setVisible(false);
                         authLayer.setManaged(false);
                         workLayer.setDisable(false);
-//                        centerPanel.setDisable(false);
                         uploadMenuButton.setDisable(false);
                         remotePathField.setText(cmd.getArgs()[0]);
                         sender.sendCommand(Command.generate(Command.CommandType.LIST));
@@ -135,7 +131,7 @@ public class Controller implements Initializable {
                     }
 
                     case CD_OK: {
-                        remotePathField.setText(cmd.getArgs()[0].split("\\s")[0]);
+                        remotePathField.setText(cmd.getArgs()[0]/*.split("\\s")[0]*/);
                         sender.sendCommand(Command.generate(Command.CommandType.LIST));
                         break;
                     }
@@ -143,6 +139,11 @@ public class Controller implements Initializable {
                     case FILE_OPERATION_OK: {
                         LOGGER.log(Level.INFO, "File operation successful");
                         sender.sendCommand(Command.generate(Command.CommandType.LIST));
+                        break;
+                    }
+
+                    case MKDIR: {
+
                         break;
                     }
 
@@ -159,9 +160,22 @@ public class Controller implements Initializable {
 
             if (args[0] instanceof FileWrapper) {
                 FileWrapper fw = (FileWrapper) args[0];
+                Path targetFileName;
+//                if (Paths.get(fw.getFilePath()).getNameCount() > 1) {
+                if (fw.getIsDeep()) {
+                    targetFileName = getCurrentPath().resolve(fw.getFilePath());
+                } else {
+                    targetFileName = getCurrentPath().resolve(fw.getFileName());
+                }
+
+
                 try {
 //                    if (fw.getType() == Command.CommandType.COPY) {
-                        File file = new File(getCurrentPath().resolve(fw.getFileName()).toString());
+
+                    if (targetFileName.getFileName().toString().lastIndexOf(".") == -1) {
+                        Files.createDirectories(targetFileName);
+                    } else {
+                        File file = new File(targetFileName.toString());
                         if (!file.exists()) {
                             file.createNewFile();
                         }
@@ -177,11 +191,13 @@ public class Controller implements Initializable {
 
                         }
                         if (fw.getCurrentPart() == fw.getParts()) {
-                            LOGGER.log(Level.INFO, "Object \"" + fw.getFileName() + "\" received");
+                            fos.getFD().sync();
                             fos.close();
-                            updateFileList(getCurrentPath());
+                            fos = null;
+                            LOGGER.log(Level.INFO, "Object \"" + fw.getFileName() + "\" received");
+//                            updateFileList(getCurrentPath());
                         }
-
+                    }
 //                    }
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -403,11 +419,23 @@ public class Controller implements Initializable {
                 Path toDeleteFile = Paths.get(localPathField.getText())
                         .resolve(getSelectedFileName(true));
                 if (Files.exists(toDeleteFile)) {
-                    Alert alert = new Alert(Alert.AlertType.CONFIRMATION, "Удалить файла \"" + toDeleteFile.getFileName() + "\"?", ButtonType.OK, ButtonType.CANCEL);
-                    Optional<ButtonType> option = alert.showAndWait();
-                    if (option.get() == ButtonType.OK) {
-                        Files.delete(toDeleteFile);
-                        LOGGER.log(Level.INFO, "Object \"" + toDeleteFile.getFileName() + "\" deleted successful");
+                    if (Files.isDirectory(toDeleteFile)) {              // удаляем каталог
+                        Alert alert = new Alert(Alert.AlertType.CONFIRMATION, "Удалить каталог \"" + toDeleteFile.getFileName() + "\"?", ButtonType.OK, ButtonType.CANCEL);
+                        Optional<ButtonType> option = alert.showAndWait();
+                        if (option.get() == ButtonType.OK) {
+                            Files.walk(toDeleteFile)
+                                    .sorted(Comparator.reverseOrder())
+                                    .map(Path::toFile)
+                                    .forEach(File::delete);
+                            LOGGER.log(Level.INFO, "Directory tree \"" + toDeleteFile.getFileName() + "\" DELETE successful");
+                        }
+                    } else {
+                        Alert alert = new Alert(Alert.AlertType.CONFIRMATION, "Удалить файл \"" + toDeleteFile.getFileName() + "\"?", ButtonType.OK, ButtonType.CANCEL);
+                        Optional<ButtonType> option = alert.showAndWait();
+                        if (option.get() == ButtonType.OK) {
+                            Files.delete(toDeleteFile);
+                            LOGGER.log(Level.INFO, "Object \"" + toDeleteFile.getFileName() + "\" deleted successful");
+                        }
                     }
                     updateFileList(Paths.get(localPathField.getText()));
                 }
@@ -443,17 +471,23 @@ public class Controller implements Initializable {
     }
 
     public void uploadAction(ActionEvent actionEvent) throws IOException {
-        fileUploader(Command.CommandType.COPY);
+        if (localFilesView.getSelectionModel().getSelectedItem().getType() == FileInfo.FileType.FILE) {
+            Path filePath = Paths.get(localPathField.getText()).resolve(getSelectedFileName(true));
+            fileUploader(Command.CommandType.COPY, filePath);
+        } else if (localFilesView.getSelectionModel().getSelectedItem().getType() == FileInfo.FileType.DIRECTORY) {
+            directoryUploader(Command.CommandType.COPY);
+        }
     }
 
     public void uploadDelAction(ActionEvent actionEvent) {
-        fileUploader(Command.CommandType.MOVE);
+        Path filePath = Paths.get(localPathField.getText()).resolve(getSelectedFileName(true));
+        fileUploader(Command.CommandType.MOVE, filePath);
         updateFileList(getCurrentPath());
     }
 
-    private void fileUploader(Command.CommandType type) {
-        Path filePath = Paths.get(localPathField.getText()).
-                resolve(getSelectedFileName(true));
+    private void fileUploader(Command.CommandType type, Path filePath) {
+//        Path filePath = Paths.get(localPathField.getText()).
+//                resolve(getSelectedFileName(true));
         if (Files.exists(filePath) && !Files.isDirectory(filePath)) {
             LOGGER.log(Level.INFO, "Upload transfer BEGIN, file name: " + filePath.getFileName());
             sender.sendFile(filePath, type);
@@ -461,6 +495,38 @@ public class Controller implements Initializable {
             LOGGER.log(Level.ERROR, "File for upload not selected");
             Alert alert = new Alert(Alert.AlertType.WARNING, "Не выбран файл для загрузки", ButtonType.OK);
             alert.showAndWait();
+        }
+    }
+
+    private void directoryUploader(Command.CommandType type) throws IOException {
+        Path dirPath = Paths.get(localPathField.getText()).resolve(getSelectedFileName(true));
+        Path currentRemoteDir = Paths.get(remotePathField.getText());
+        Path copyROOT;
+        if (currentRemoteDir.getNameCount() > 1) {
+            copyROOT = currentRemoteDir.subpath(1, currentRemoteDir.getNameCount())/*.resolve(dirPath.getFileName())*/;
+        } else {
+            copyROOT = Paths.get("");
+        }
+        sender.sendCommand(Command.generate(Command.CommandType.SWITCH_FEED_BACK));
+        try {
+
+            Files.walk(dirPath).forEach(item -> {
+                Path relativeRemotePath = item.subpath(dirPath.getParent().getNameCount(), item.getNameCount());
+                if (Files.isDirectory(item)) {
+                    sender.sendCommand(Command.generate(Command.CommandType.CD_ROOT));
+                    sender.sendCommand(Command.generate(Command.CommandType.CD, copyROOT.toString()));
+                    sender.sendCommand(Command.generate(Command.CommandType.MKDIR, relativeRemotePath.toString()));
+                } else {
+                    sender.sendCommand(Command.generate(Command.CommandType.CD_ROOT));
+                    sender.sendCommand(Command.generate(Command.CommandType.CD, copyROOT.resolve(relativeRemotePath.getParent()).toString()));
+                    fileUploader(Command.CommandType.COPY, item);
+                }
+            });
+            LOGGER.log(Level.INFO, "Folder \"" + dirPath.getFileName() + "\" and all subfolder COPY to Server.");
+        } finally {
+            sender.sendCommand(Command.generate(Command.CommandType.CD_ROOT));
+            sender.sendCommand(Command.generate(Command.CommandType.SWITCH_FEED_BACK));
+            sender.sendCommand(Command.generate(Command.CommandType.CD, copyROOT.toString()));
         }
     }
 
@@ -488,6 +554,10 @@ public class Controller implements Initializable {
                 }
                 updateFileList(Paths.get(localPathField.getText()));
             }
+        }
+        if (remoteFilesView.getSelectionModel().getSelectedItem().getType() == FileInfo.FileType.DIRECTORY) {
+            sender.sendCommand(Command.generate(type, getSelectedFileName(false)));
+            LOGGER.log(Level.INFO, "Send command to download, Directory name: " + getSelectedFileName(false));
         }
     }
 
@@ -535,8 +605,9 @@ public class Controller implements Initializable {
     }
 
 
-    public void onKeyRealisedLocalAction(KeyEvent keyEvent) {
+    public void onKeyRealisedLocalAction(KeyEvent keyEvent) throws IOException {
         switchTransferAction(localFilesView);
+//        Files.walk(Paths.get("./cloud-storage-server")).forEach(System.out::println);
     }
 
 
@@ -550,7 +621,7 @@ public class Controller implements Initializable {
         if (table.getSelectionModel().getSelectedItem() == null) {
             isDisabled = true;
         } else {
-            isDisabled = !(table.getSelectionModel().getSelectedItem().getType() == FileInfo.FileType.FILE && isAuthOK);
+            isDisabled = (table.getSelectionModel().getSelectedItem().getType() == FileInfo.FileType.UP_FOLDER || !isAuthOK);
         }
         if (table.getId().equals("localFilesView")) {
             uploadMenuButton.setDisable(isDisabled);

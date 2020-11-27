@@ -63,7 +63,11 @@ public class NetworkSenderNetty {
     }
 
     public void sendCommand(Command command) {
-        channel.writeAndFlush(command);
+        try {
+            channel.writeAndFlush(command).sync();
+        } catch (InterruptedException e) {
+            LOGGER.log(Level.ERROR, e);
+        }
     }
 
     public void sendFile(Path filePath, Command.CommandType type) {
@@ -75,7 +79,7 @@ public class NetworkSenderNetty {
             FileInputStream fis = new FileInputStream(filePath.toString());
             int read;
             int part = 1;
-            FileWrapper fw = new FileWrapper(filePath, type);
+            FileWrapper fw = new FileWrapper(filePath, type, false);
 
             while ((read = fis.read(fw.getBuffer())) != -1) {
                 fw.setCurrentPart(part);

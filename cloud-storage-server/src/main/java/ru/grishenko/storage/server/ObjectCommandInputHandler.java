@@ -10,14 +10,17 @@ import ru.grishenko.storage.client.helper.Command;
 import ru.grishenko.storage.client.helper.FileWrapper;
 import ru.grishenko.storage.server.exception.*;
 import ru.grishenko.storage.server.helper.AuthInfo;
+import ru.grishenko.storage.server.helper.FileSender;
 import ru.grishenko.storage.server.helper.Navigate;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Comparator;
 
 public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*SimpleChannelInboundHandler <String>*/ {
 
@@ -29,6 +32,8 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
     private Path currentDir;
     private FileOutputStream fos;
 
+    private boolean needFeedBack;
+
 
     public ObjectCommandInputHandler(UserDAO userDAO) {
         this.userDAO = userDAO;
@@ -36,6 +41,7 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         LOGGER.log(Level.INFO, "Client connected");
+        needFeedBack = true;
     }
 
     @Override
@@ -99,20 +105,29 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
                     break;
                 }
 
+                case SWITCH_FEED_BACK: {
+                    needFeedBack = !needFeedBack;
+                    break;
+                }
+
                 case LIST: {
                     ctx.channel().writeAndFlush(Navigate.getFileList(currentDir, userRoot));
                     break;
                 }
                 case CD: {
-                    currentDir = currentDir.resolve(cmd.getArgs()[0].split("\\s")[0]);
-                    ctx.channel().writeAndFlush(Command.generate(Command.CommandType.CD_OK, currentDir.toString()));
+                    currentDir = currentDir.resolve(cmd.getArgs()[0]/*.split("\\s")[0]*/);
+                    if (needFeedBack) {
+                        ctx.channel().writeAndFlush(Command.generate(Command.CommandType.CD_OK, currentDir.toString()));
+                    }
                     break;
                 }
 
                 case CD_UP: {
                     if (currentDir.getParent() != null) {
                         currentDir = currentDir.getParent();
-                        ctx.channel().writeAndFlush(Command.generate(Command.CommandType.CD_OK, currentDir.toString()));
+                        if (needFeedBack) {
+                            ctx.channel().writeAndFlush(Command.generate(Command.CommandType.CD_OK, currentDir.toString()));
+                        }
                     } else {
                         ctx.channel().writeAndFlush(Command.generate(Command.CommandType.ERROR, "Достигнута крневая директория."));
                     }
@@ -122,7 +137,9 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
                 case CD_HOME: // todo add functional for user home directory
                 case CD_ROOT: {
                     currentDir = userRoot;
-                    ctx.channel().writeAndFlush(Command.generate(Command.CommandType.CD_OK, currentDir.toString()));
+                    if (needFeedBack) {
+                        ctx.channel().writeAndFlush(Command.generate(Command.CommandType.CD_OK, currentDir.toString()));
+                    }
                     break;
                 }
 
@@ -131,15 +148,21 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
                         Path newFilePath = currentDir.resolve(cmd.getArgs()[0]);
                         if (!Files.exists(newFilePath)) {
                             Files.createFile(newFilePath);
-                            ctx.channel().writeAndFlush(Command.generate(Command.CommandType.FILE_OPERATION_OK));
+                            if (needFeedBack) {
+                                ctx.channel().writeAndFlush(Command.generate(Command.CommandType.FILE_OPERATION_OK));
+                            }
                             LOGGER.log(Level.INFO, "File CREATE by name \"" + cmd.getArgs()[0] + "\"");
                         } else {
                             LOGGER.log(Level.ERROR, "File \"" + cmd.getArgs()[0] + "\" already exists");
-                            ctx.channel().writeAndFlush(Command.generate(Command.CommandType.ERROR, "Файл с таким именем уже существует."));
+                            if (needFeedBack) {
+                                ctx.channel().writeAndFlush(Command.generate(Command.CommandType.ERROR, "Файл с таким именем уже существует."));
+                            }
                         }
                     } else {
                         LOGGER.log(Level.ERROR, "File name is BLANK");
-                        ctx.channel().writeAndFlush(Command.generate(Command.CommandType.ERROR, "Имя файла не указано"));
+                        if (needFeedBack) {
+                            ctx.channel().writeAndFlush(Command.generate(Command.CommandType.ERROR, "Имя файла не указано"));
+                        }
                     }
                     break;
                 }
@@ -148,16 +171,23 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
                     if (cmd.getArgs().length > 0 && cmd.getArgs()[0] != null && !cmd.getArgs()[0].equals("")) {
                         Path newDirPath = currentDir.resolve(cmd.getArgs()[0]);
                         if (!Files.exists(newDirPath)) {
-                            Files.createDirectory(newDirPath);
+                            //Files.createDirectory(newDirPath);
+                            Files.createDirectories(newDirPath);
                             LOGGER.log(Level.INFO, "Folder CREATE by name \"" + cmd.getArgs()[0] + "\"");
-                            ctx.channel().writeAndFlush(Command.generate(Command.CommandType.FILE_OPERATION_OK));
+                            if (needFeedBack) {
+                                ctx.channel().writeAndFlush(Command.generate(Command.CommandType.FILE_OPERATION_OK));
+                            }
                         } else {
                             LOGGER.log(Level.ERROR, "Folder \"" + cmd.getArgs()[0] + "\" already exists");
-                            ctx.channel().writeAndFlush(Command.generate(Command.CommandType.ERROR, "Каталог с таким именем уже существует."));
+                            if (needFeedBack) {
+                                ctx.channel().writeAndFlush(Command.generate(Command.CommandType.ERROR, "Каталог с таким именем уже существует."));
+                            }
                         }
                     } else {
                         LOGGER.log(Level.ERROR, "Folder name is BLANK");
-                        ctx.channel().writeAndFlush(Command.generate(Command.CommandType.ERROR, "Имя каталога не указано"));
+                        if (needFeedBack) {
+                            ctx.channel().writeAndFlush(Command.generate(Command.CommandType.ERROR, "Имя каталога не указано"));
+                        }
                     }
                     break;
                 }
@@ -172,15 +202,20 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
                         if (!Files.exists(newFilePath) && Files.exists(oldFilePath)) {
                             Files.move(oldFilePath, newFilePath);
                             LOGGER.log(Level.INFO, "Rename successful:  Old name \"" + cmd.getArgs()[0] + "\", New name\"" + cmd.getArgs()[1] + "\"");
-                            ctx.channel().writeAndFlush(Command.generate(Command.CommandType.FILE_OPERATION_OK));
+                            if (needFeedBack) {
+                                ctx.channel().writeAndFlush(Command.generate(Command.CommandType.FILE_OPERATION_OK));
+                            }
                         } else {
                             LOGGER.log(Level.ERROR, "Object \"" + cmd.getArgs()[0] + "\" already exists");
-                            ctx.channel().writeAndFlush(Command.generate(Command.CommandType.ERROR, "Объекта с таким именем уже сущесвует"));
-
+                            if (needFeedBack) {
+                                ctx.channel().writeAndFlush(Command.generate(Command.CommandType.ERROR, "Объекта с таким именем уже сущесвует"));
+                            }
                         }
                     } else {
                         LOGGER.log(Level.ERROR, "Object name is BLANK");
-                        ctx.channel().writeAndFlush(Command.generate(Command.CommandType.ERROR, "Не верные параметру переименования"));
+                        if (needFeedBack) {
+                            ctx.channel().writeAndFlush(Command.generate(Command.CommandType.ERROR, "Не верные параметру переименования"));
+                        }
                     }
                     break;
                 }
@@ -189,16 +224,33 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
                     if (cmd.getArgs().length > 0 && cmd.getArgs()[0] != null && !cmd.getArgs()[0].equals("")) {
                         Path toDeleteFile = currentDir.resolve(cmd.getArgs()[0]);
                         if (Files.exists(toDeleteFile)) {
-                            Files.delete(toDeleteFile);
-                            LOGGER.log(Level.INFO, "Object \"" + cmd.getArgs()[0] + "\" DELETE successful");
-                            ctx.channel().writeAndFlush(Command.generate(Command.CommandType.FILE_OPERATION_OK));
+                            if (Files.isDirectory(toDeleteFile)) {              // удаляем каталог
+                                Files.walk(toDeleteFile)
+                                        .sorted(Comparator.reverseOrder())
+                                        .map(Path::toFile)
+                                        .forEach(File::delete);
+                                LOGGER.log(Level.INFO, "Directory tree \"" + cmd.getArgs()[0] + "\" DELETE successful");
+                                if (needFeedBack) {
+                                    ctx.channel().writeAndFlush(Command.generate(Command.CommandType.FILE_OPERATION_OK));
+                                }
+                            } else {                                            // удаляем файл
+                                Files.delete(toDeleteFile);
+                                LOGGER.log(Level.INFO, "File \"" + cmd.getArgs()[0] + "\" DELETE successful");
+                                if (needFeedBack) {
+                                    ctx.channel().writeAndFlush(Command.generate(Command.CommandType.FILE_OPERATION_OK));
+                                }
+                            }
                         } else {
                             LOGGER.log(Level.ERROR, "Object \"" + cmd.getArgs()[0] + "\" not found");
-                            ctx.channel().writeAndFlush(Command.generate(Command.CommandType.ERROR, "Объекта с таким именем не найден"));
+                            if (needFeedBack) {
+                                ctx.channel().writeAndFlush(Command.generate(Command.CommandType.ERROR, "Объекта с таким именем не найден"));
+                            }
                         }
                     } else {
                         LOGGER.log(Level.ERROR, "Object name is BLANK");
-                        ctx.channel().writeAndFlush(Command.generate(Command.CommandType.ERROR, "Не указано имя объекта"));
+                        if (needFeedBack) {
+                            ctx.channel().writeAndFlush(Command.generate(Command.CommandType.ERROR, "Не указано имя объекта"));
+                        }
                     }
                     break;
                 }
@@ -207,24 +259,31 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
                 case COPY: {
                     if (cmd.getArgs().length > 0 && cmd.getArgs()[0] != null && !cmd.getArgs()[0].equals("")) {
                         Path filePath = currentDir.resolve(cmd.getArgs()[0]);
-                        FileInputStream fis = new FileInputStream(filePath.toString());
-                        int read;
-                        int part = 1;
-                        FileWrapper fw = new FileWrapper(filePath, Command.CommandType.COPY);
-                        LOGGER.log(Level.INFO, "Object \"" + cmd.getArgs()[0] + "\" ready to transfer");
-                        while ((read = fis.read(fw.getBuffer())) != -1) {
-                            fw.setCurrentPart(part);
-                            fw.setReadByte(read);
-                            ctx.channel().writeAndFlush(fw).sync();
-                            part++;
-                        }
-                        LOGGER.log(Level.INFO, "Send complete: " + fw.toString());
-                        fis.close();
-                        if (cmd.getType() == Command.CommandType.MOVE) {
-                            Files.delete(filePath);
-                            LOGGER.log(Level.INFO, "Delete after send complete: " + fw.toString());
-                            ctx.channel().writeAndFlush(Command.generate(Command.CommandType.FILE_OPERATION_OK));
-                        }
+//                        if (Files.isDirectory(filePath)) {
+//
+//                        } else {
+                                new FileSender(ctx, filePath, cmd);
+//                            FileInputStream fis = new FileInputStream(filePath.toString());
+//                            int read;
+//                            int part = 1;
+//                            FileWrapper fw = new FileWrapper(filePath, Command.CommandType.COPY);
+//                            LOGGER.log(Level.INFO, "Object \"" + cmd.getArgs()[0] + "\" ready to transfer");
+//                            while ((read = fis.read(fw.getBuffer())) != -1) {
+//                                fw.setCurrentPart(part);
+//                                fw.setReadByte(read);
+//                                ctx.channel().writeAndFlush(fw).sync();
+//                                part++;
+//                            }
+//                            LOGGER.log(Level.INFO, "Send complete: " + fw.toString());
+//                            fis.close();
+//                            if (cmd.getType() == Command.CommandType.MOVE) {
+//                                Files.delete(filePath);
+//                                LOGGER.log(Level.INFO, "Delete after send complete: " + fw.toString());
+//                                if (needFeedBack) {
+//                                    ctx.channel().writeAndFlush(Command.generate(Command.CommandType.FILE_OPERATION_OK));
+//                                }
+//                            }
+//                        }
                     }
                     break;
                 }
@@ -232,18 +291,24 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
         }
 
         if (msg instanceof FileWrapper) {
-            FileWrapper fw = (FileWrapper) msg;
-//            if (fw.getType() == Command.CommandType.COPY) {
-            File file = new File(currentDir.resolve(fw.getFileName()).toString());
+            try {
+                FileWrapper fw = (FileWrapper) msg;
+
+                Path filePath = currentDir.resolve(fw.getFileName());
+
+                if (!filePath.isAbsolute()) {
+                    filePath = ROOT_SERVER.toAbsolutePath().resolve(filePath);
+                }
+                File file = new File(filePath.toString());
                 if (!file.exists()) {
                     file.createNewFile();
                 }
                 if (fos == null) {
                     fos = new FileOutputStream(file);
-
                 }
+
                 if (fos.getChannel().isOpen()) {
-                    fos.write(fw.getBuffer(),0,fw.getReadByte());
+                    fos.write(fw.getBuffer(), 0, fw.getReadByte());
 
                 } else {
                     fos = new FileOutputStream(file);
@@ -251,12 +316,18 @@ public class ObjectCommandInputHandler extends ChannelInboundHandlerAdapter/*Sim
 
                 }
                 if (fw.getCurrentPart() == fw.getParts()) {
+                    fos.getFD().sync();
                     fos.close();
+                    fos = null;
                     LOGGER.log(Level.INFO, "Object RECEIVED: " + fw.getFileName());
-                    ctx.channel().writeAndFlush(Command.generate(Command.CommandType.FILE_OPERATION_OK));
+                    if (needFeedBack) {
+                        ctx.channel().writeAndFlush(Command.generate(Command.CommandType.FILE_OPERATION_OK));
+                    }
                 }
 
-//            }
+            } catch (IOException e) {
+                LOGGER.log(Level.ERROR, e);
+            }
         }
 
     }
